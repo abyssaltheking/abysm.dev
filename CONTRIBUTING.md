@@ -27,5 +27,5 @@ However, it is *heavily* discouraged to use AI to make contributions, but if you
     - For `/src/server`, use `PascalCase` if the value is exported, otherwise use `camelCase`.
 - Operators and control flow statements should have spaces between values, like `for (condition) { }` instead of `for(condition){ }` and `9 / 3` over `9/3`.
 - Pointers should go in front of the type, so in Go, for example, it would look like:
-<br>`func updatePlayer(player: *Player)`
-- Omit braces where possible. If you can write it in a single line, it is much preferred.
+<br>`func updatePlayer(player *Player)`
+- Omit braces where possible when working in `/src/client`. If you can write it in a single line, it is much preferred for all languages.
