@@ -3,7 +3,7 @@
 abysm.dev is a free game creation platform for the web that has multiplayer baked into the engine, so you can focus on your game. 
 
 ## *huh?*
-abysm.dev is similar to platform like Roblox, in that you can make an online multiplayer game for completely free, and complicated stuff like the networking and server hosting is covered by me.
+abysm.dev is similar to platforms like Roblox, in that you can make an online multiplayer game for completely free, and complicated stuff like the networking and server hosting is covered by me.
 
 What makes abysm.dev different is that you don't need to install a game client. Just go over to the game you want to play, and press play. 
 
