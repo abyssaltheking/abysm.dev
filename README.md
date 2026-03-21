@@ -9,7 +9,7 @@ What makes abysm.dev different is that you don't need to install a game client. 
 
 You can also make a game with a free account, using Lua to script.
 
-All of the code is completely open source so that way, the community can drive the development instead of just me dictating what features to add. It also helps allieviate the amount of work and time it'll take to create and develop this platform.
+All of the code is completely open source so that way, the community can drive the development instead of just me dictating what features to add. It also helps alleviate the amount of work and time it'll take to create and develop this platform.
 
 ## Why?
 I made abysm.dev because of another platform, [modd.io](https://www.modd.io/). It used to be what I dream for this to be, a place where you can make a game and have it up in seconds.
