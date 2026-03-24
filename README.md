@@ -1,5 +1,3 @@
-# abysm.dev 
-
 ![logo](logo.png)
 
 abysm.dev is a free game creation platform for the web that has multiplayer baked into the engine, so you can focus on your game. 
