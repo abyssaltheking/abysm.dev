@@ -1,7 +1,18 @@
 package main
 
-import "fmt"
+import (
+	"mime"
+
+	"github.com/gofiber/fiber/v3"
+	"github.com/gofiber/fiber/v3/middleware/static"
+)
 
 func main() {
-	fmt.Println("Hello, World!")
+	mime.AddExtensionType(".js", "application/javascript")
+
+	app := fiber.New()
+
+	app.Get("/*", static.New("./build"))
+
+	app.Listen(":8080")
 }
