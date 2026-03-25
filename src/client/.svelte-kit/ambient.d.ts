@@ -41,6 +41,7 @@ declare module '$env/static/private' {
 	export const SHELL: string;
 	export const npm_command: string;
 	export const LSCOLORS: string;
+	export const USER_ZDOTDIR: string;
 	export const npm_config_userconfig: string;
 	export const COLORTERM: string;
 	export const HYPRLAND_CMD: string;
@@ -83,6 +84,7 @@ declare module '$env/static/private' {
 	export const FZF_DEFAULT_COMMAND: string;
 	export const VSCODE_GIT_ASKPASS_NODE: string;
 	export const MOTD_SHOWN: string;
+	export const VSCODE_INJECTION: string;
 	export const HOME: string;
 	export const LANG: string;
 	export const LC_PAPER: string;
@@ -103,6 +105,7 @@ declare module '$env/static/private' {
 	export const XDG_CACHE_HOME: string;
 	export const npm_lifecycle_script: string;
 	export const VSCODE_GIT_ASKPASS_EXTRA_ARGS: string;
+	export const VSCODE_PYTHON_AUTOACTIVATE_GUARD: string;
 	export const npm_config_npm_version: string;
 	export const XDG_SESSION_CLASS: string;
 	export const TERM: string;
@@ -113,6 +116,7 @@ declare module '$env/static/private' {
 	export const LESS_TERMCAP_md: string;
 	export const VSCODE_NONCE: string;
 	export const npm_config_prefix: string;
+	export const ZDOTDIR: string;
 	export const USER: string;
 	export const VSCODE_GIT_IPC_HANDLE: string;
 	export const HYPRLAND_INSTANCE_SIGNATURE: string;
@@ -245,6 +249,7 @@ declare module '$env/dynamic/private' {
 		SHELL: string;
 		npm_command: string;
 		LSCOLORS: string;
+		USER_ZDOTDIR: string;
 		npm_config_userconfig: string;
 		COLORTERM: string;
 		HYPRLAND_CMD: string;
@@ -287,6 +292,7 @@ declare module '$env/dynamic/private' {
 		FZF_DEFAULT_COMMAND: string;
 		VSCODE_GIT_ASKPASS_NODE: string;
 		MOTD_SHOWN: string;
+		VSCODE_INJECTION: string;
 		HOME: string;
 		LANG: string;
 		LC_PAPER: string;
@@ -307,6 +313,7 @@ declare module '$env/dynamic/private' {
 		XDG_CACHE_HOME: string;
 		npm_lifecycle_script: string;
 		VSCODE_GIT_ASKPASS_EXTRA_ARGS: string;
+		VSCODE_PYTHON_AUTOACTIVATE_GUARD: string;
 		npm_config_npm_version: string;
 		XDG_SESSION_CLASS: string;
 		TERM: string;
@@ -317,6 +324,7 @@ declare module '$env/dynamic/private' {
 		LESS_TERMCAP_md: string;
 		VSCODE_NONCE: string;
 		npm_config_prefix: string;
+		ZDOTDIR: string;
 		USER: string;
 		VSCODE_GIT_IPC_HANDLE: string;
 		HYPRLAND_INSTANCE_SIGNATURE: string;
