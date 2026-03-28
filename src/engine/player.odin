@@ -1,8 +1,13 @@
 package main
 
+import "core:fmt"
 import raylib "vendor:raylib"
 import "core:math"
 import "core:math/rand"
+
+TRACKED_KEYS :: []raylib.KeyboardKey {
+    .W, .S, .A, .D
+}
 
 Player :: struct {
     x, y: f32, 
@@ -20,22 +25,24 @@ new_player :: proc(x, y: f32, width, height: i32) -> Player {
     }
 }
 
+get_player_input :: proc() -> i32 {
+    player_input: i32
+
+    for key, index in TRACKED_KEYS {
+        if raylib.IsKeyDown(key) {
+            player_input |= 1 << u32(index) 
+        }
+    }
+
+    return player_input
+}
+
 accept_player_movement :: proc(player: ^Player) {
-    if raylib.IsKeyDown(raylib.KeyboardKey.A) {
-        player.x -= 5
-    }
-
-    if raylib.IsKeyDown(raylib.KeyboardKey.D) {
-        player.x += 5
-    }
-
-    if raylib.IsKeyDown(raylib.KeyboardKey.W) {
-        player.y -= 5
-    }
-
-    if raylib.IsKeyDown(raylib.KeyboardKey.S) {
-        player.y += 5
-    }
+    if raylib.IsKeyDown(.A) do player.x -= 5
+    if raylib.IsKeyDown(.D) do player.x += 5
+    if raylib.IsKeyDown(.W) do player.y -= 5
+    if raylib.IsKeyDown(.S) do player.y += 5
+    fmt.println(get_player_input())
 }
 
 draw_player :: proc(player: ^Player) {

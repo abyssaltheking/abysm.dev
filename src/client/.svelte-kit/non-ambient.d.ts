@@ -39,6 +39,6 @@ declare module "$app/types" {
 		};
 		Pathname(): "/" | "/game";
 		ResolvedPathname(): `${"" | `/${string}`}${ReturnType<AppTypes['Pathname']>}`;
-		Asset(): "/robots.txt" | string & {};
+		Asset(): "/engine-build/index.html" | "/engine-build/index.js" | "/engine-build/index.wasm" | "/engine-build/odin.js" | "/engine-build/websocketHandler.js" | "/robots.txt" | string & {};
 	}
 }

@@ -557,6 +557,10 @@ function abort(what) {
 
   ABORT = true;
 
+  if (what.search(/RuntimeError: [Uu]nreachable/) >= 0) {
+    what += '. "unreachable" may be due to ASYNCIFY_STACK_SIZE not being large enough (try increasing it)';
+  }
+
   // Use a wasm runtime error, because a JS error might be seen as a foreign
   // exception, which means we'd run destructors on it. We need the error to
   // simply make the program stop.
@@ -668,6 +672,10 @@ async function instantiateAsync(binary, binaryFile, imports) {
 }
 
 function getWasmImports() {
+  // instrumenting imports is used in asyncify in two ways: to add assertions
+  // that check for proper import use, and for JSPI we use them to set up
+  // the Promise API on the import side.
+  Asyncify.instrumentWasmImports(wasmImports);
   // prepare imports
   var imports = {
     'env': wasmImports,
@@ -685,6 +693,8 @@ async function createWasm() {
   /** @param {WebAssembly.Module=} module*/
   function receiveInstance(instance, module) {
     wasmExports = instance.exports;
+
+    wasmExports = Asyncify.instrumentWasmExports(wasmExports);
 
     assignWasmExports(wasmExports);
 
@@ -827,6 +837,34 @@ async function createWasm() {
       }
     };
 
+
+  var dynCalls = {
+  };
+  var dynCallLegacy = (sig, ptr, args) => {
+      sig = sig.replace(/p/g, 'i')
+      assert(sig in dynCalls, `bad function pointer type - sig is not in dynCalls: '${sig}'`);
+      if (args?.length) {
+        // j (64-bit integer) is fine, and is implemented as a BigInt. Without
+        // legalization, the number of parameters should match (j is not expanded
+        // into two i's).
+        assert(args.length === sig.length - 1);
+      } else {
+        assert(sig.length == 1);
+      }
+      var f = dynCalls[sig];
+      return f(ptr, ...args);
+    };
+  var dynCall = (sig, ptr, args = [], promising = false) => {
+      assert(ptr, `null function pointer in dynCall`);
+      assert(!promising, 'async dynCall is not supported in this mode')
+      var rtn = dynCallLegacy(sig, ptr, args);
+  
+      function convert(rtn) {
+        return rtn;
+      }
+  
+      return convert(rtn);
+    };
 
   
     /**
@@ -6036,20 +6074,6 @@ var stringToUTF8Array = (str, heap, outIdx, maxBytesToWrite) => {
     };
   
   
-  
-  var wasmTableMirror = [];
-  
-  
-  var getWasmTableEntry = (funcPtr) => {
-      var func = wasmTableMirror[funcPtr];
-      if (!func) {
-        /** @suppress {checkTypes} */
-        wasmTableMirror[funcPtr] = func = wasmTable.get(funcPtr);
-      }
-      /** @suppress {checkTypes} */
-      assert(wasmTable.get(funcPtr) == func, 'JavaScript-side Wasm function table mirror is out of date!');
-      return func;
-    };
   var registerMouseEventCallback = (target, userData, useCapture, callbackfunc, eventTypeId, eventTypeString, targetThread) => {
       var eventSize = 64;
       JSEvents.mouseEvent ||= _malloc(eventSize);
@@ -6059,7 +6083,7 @@ var stringToUTF8Array = (str, heap, outIdx, maxBytesToWrite) => {
         // TODO: Make this access thread safe, or this could update live while app is reading it.
         fillMouseEventData(JSEvents.mouseEvent, e, target);
   
-        if (getWasmTableEntry(callbackfunc)(eventTypeId, JSEvents.mouseEvent, userData)) e.preventDefault();
+        if (((a1, a2, a3) => dynCall_iiii(callbackfunc, a1, a2, a3))(eventTypeId, JSEvents.mouseEvent, userData)) e.preventDefault();
       };
   
       var eventHandler = {
@@ -6109,7 +6133,6 @@ var stringToUTF8Array = (str, heap, outIdx, maxBytesToWrite) => {
       }
     };
   
-  
   var registerFullscreenChangeEventCallback = (target, userData, useCapture, callbackfunc, eventTypeId, eventTypeString, targetThread) => {
       var eventSize = 276;
       JSEvents.fullscreenChangeEvent ||= _malloc(eventSize);
@@ -6118,7 +6141,7 @@ var stringToUTF8Array = (str, heap, outIdx, maxBytesToWrite) => {
         var fullscreenChangeEvent = JSEvents.fullscreenChangeEvent;
         fillFullscreenChangeEventData(fullscreenChangeEvent);
   
-        if (getWasmTableEntry(callbackfunc)(eventTypeId, fullscreenChangeEvent, userData)) e.preventDefault();
+        if (((a1, a2, a3) => dynCall_iiii(callbackfunc, a1, a2, a3))(eventTypeId, fullscreenChangeEvent, userData)) e.preventDefault();
       };
   
       var eventHandler = {
@@ -6148,7 +6171,6 @@ var stringToUTF8Array = (str, heap, outIdx, maxBytesToWrite) => {
   
   
   
-  
   var registerGamepadEventCallback = (target, userData, useCapture, callbackfunc, eventTypeId, eventTypeString, targetThread) => {
       var eventSize = 1240;
       JSEvents.gamepadEvent ||= _malloc(eventSize);
@@ -6157,7 +6179,7 @@ var stringToUTF8Array = (str, heap, outIdx, maxBytesToWrite) => {
         var gamepadEvent = JSEvents.gamepadEvent;
         fillGamepadEventData(gamepadEvent, e["gamepad"]);
   
-        if (getWasmTableEntry(callbackfunc)(eventTypeId, gamepadEvent, userData)) e.preventDefault();
+        if (((a1, a2, a3) => dynCall_iiii(callbackfunc, a1, a2, a3))(eventTypeId, gamepadEvent, userData)) e.preventDefault();
       };
   
       var eventHandler = {
@@ -6201,7 +6223,6 @@ var stringToUTF8Array = (str, heap, outIdx, maxBytesToWrite) => {
       stringToUTF8(id, eventStruct + 129, 128);
     };
   
-  
   var registerPointerlockChangeEventCallback = (target, userData, useCapture, callbackfunc, eventTypeId, eventTypeString, targetThread) => {
       var eventSize = 257;
       JSEvents.pointerlockChangeEvent ||= _malloc(eventSize);
@@ -6210,7 +6231,7 @@ var stringToUTF8Array = (str, heap, outIdx, maxBytesToWrite) => {
         var pointerlockChangeEvent = JSEvents.pointerlockChangeEvent;
         fillPointerlockChangeEventData(pointerlockChangeEvent);
   
-        if (getWasmTableEntry(callbackfunc)(eventTypeId, pointerlockChangeEvent, userData)) e.preventDefault();
+        if (((a1, a2, a3) => dynCall_iiii(callbackfunc, a1, a2, a3))(eventTypeId, pointerlockChangeEvent, userData)) e.preventDefault();
       };
   
       var eventHandler = {
@@ -6235,7 +6256,6 @@ var stringToUTF8Array = (str, heap, outIdx, maxBytesToWrite) => {
       return registerPointerlockChangeEventCallback(target, userData, useCapture, callbackfunc, 20, "pointerlockchange", targetThread);
     };
 
-  
   
   
   var registerUiEventCallback = (target, userData, useCapture, callbackfunc, eventTypeId, eventTypeString, targetThread) => {
@@ -6267,7 +6287,7 @@ var stringToUTF8Array = (str, heap, outIdx, maxBytesToWrite) => {
         HEAP32[(((uiEvent)+(24))>>2)] = outerHeight;
         HEAP32[(((uiEvent)+(28))>>2)] = pageXOffset | 0; // scroll offsets are float
         HEAP32[(((uiEvent)+(32))>>2)] = pageYOffset | 0;
-        if (getWasmTableEntry(callbackfunc)(eventTypeId, uiEvent, userData)) e.preventDefault();
+        if (((a1, a2, a3) => dynCall_iiii(callbackfunc, a1, a2, a3))(eventTypeId, uiEvent, userData)) e.preventDefault();
       };
   
       var eventHandler = {
@@ -6284,7 +6304,6 @@ var stringToUTF8Array = (str, heap, outIdx, maxBytesToWrite) => {
   var _emscripten_set_resize_callback_on_thread = (target, userData, useCapture, callbackfunc, targetThread) =>
       registerUiEventCallback(target, userData, useCapture, callbackfunc, 10, "resize", targetThread);
 
-  
   
   
   
@@ -6348,7 +6367,7 @@ var stringToUTF8Array = (str, heap, outIdx, maxBytesToWrite) => {
         }
         HEAP32[(((touchEvent)+(8))>>2)] = numTouches;
   
-        if (getWasmTableEntry(callbackfunc)(eventTypeId, touchEvent, userData)) e.preventDefault();
+        if (((a1, a2, a3) => dynCall_iiii(callbackfunc, a1, a2, a3))(eventTypeId, touchEvent, userData)) e.preventDefault();
       };
   
       var eventHandler = {
@@ -6944,9 +6963,12 @@ var stringToUTF8Array = (str, heap, outIdx, maxBytesToWrite) => {
   
   var _emscripten_set_window_title = (title) => document.title = UTF8ToString(title);
 
-  var _emscripten_sleep = () => {
-      abort('Please compile your program with async support in order to use asynchronous operations like emscripten_sleep');
-    };
+  var _emscripten_sleep = function(ms) {
+    let innerFunc =  () => new Promise((resolve) => setTimeout(resolve, ms));
+    return Asyncify.handleAsync(innerFunc);
+  }
+  ;
+  _emscripten_sleep.isAsync = true;
 
 
   function _fd_close(fd) {
@@ -7441,7 +7463,6 @@ var stringToUTF8Array = (str, heap, outIdx, maxBytesToWrite) => {
   
   
   
-  
   var GLFW = {
   WindowFromId:(id) => {
         if (id <= 0 || !GLFW.windows) return null;
@@ -7639,7 +7660,7 @@ var stringToUTF8Array = (str, heap, outIdx, maxBytesToWrite) => {
         var charCode = event.charCode;
         if (charCode == 0 || (charCode >= 0x00 && charCode <= 0x1F)) return;
   
-        getWasmTableEntry(GLFW.active.charFunc)(GLFW.active.id, charCode);
+        ((a1, a2) => dynCall_vii(GLFW.active.charFunc, a1, a2))(GLFW.active.id, charCode);
       },
   onKeyChanged:(keyCode, status) => {
         if (!GLFW.active) return;
@@ -7653,7 +7674,7 @@ var stringToUTF8Array = (str, heap, outIdx, maxBytesToWrite) => {
   
         if (GLFW.active.keyFunc) {
           if (repeat) status = 2; // GLFW_REPEAT
-          getWasmTableEntry(GLFW.active.keyFunc)(GLFW.active.id, key, keyCode, status, GLFW.getModBits(GLFW.active));
+          ((a1, a2, a3, a4, a5) => dynCall_viiiii(GLFW.active.keyFunc, a1, a2, a3, a4, a5))(GLFW.active.id, key, keyCode, status, GLFW.getModBits(GLFW.active));
         }
       },
   onGamepadConnected:(event) => {
@@ -7716,7 +7737,7 @@ var stringToUTF8Array = (str, heap, outIdx, maxBytesToWrite) => {
         if (event.target != Browser.getCanvas() || !GLFW.active.cursorPosFunc) return;
   
         if (GLFW.active.cursorPosFunc) {
-          getWasmTableEntry(GLFW.active.cursorPosFunc)(GLFW.active.id, Browser.mouseX, Browser.mouseY);
+          ((a1, a2, a3) => dynCall_vidd(GLFW.active.cursorPosFunc, a1, a2, a3))(GLFW.active.id, Browser.mouseX, Browser.mouseY);
         }
       },
   DOMToGLFWMouseButton:(event) => {
@@ -7738,7 +7759,7 @@ var stringToUTF8Array = (str, heap, outIdx, maxBytesToWrite) => {
         if (event.target != Browser.getCanvas()) return;
   
         if (GLFW.active.cursorEnterFunc) {
-          getWasmTableEntry(GLFW.active.cursorEnterFunc)(GLFW.active.id, 1);
+          ((a1, a2) => dynCall_vii(GLFW.active.cursorEnterFunc, a1, a2))(GLFW.active.id, 1);
         }
       },
   onMouseleave:(event) => {
@@ -7747,7 +7768,7 @@ var stringToUTF8Array = (str, heap, outIdx, maxBytesToWrite) => {
         if (event.target != Browser.getCanvas()) return;
   
         if (GLFW.active.cursorEnterFunc) {
-          getWasmTableEntry(GLFW.active.cursorEnterFunc)(GLFW.active.id, 0);
+          ((a1, a2) => dynCall_vii(GLFW.active.cursorEnterFunc, a1, a2))(GLFW.active.id, 0);
         }
       },
   onMouseButtonChanged:(event, status) => {
@@ -7810,7 +7831,7 @@ var stringToUTF8Array = (str, heap, outIdx, maxBytesToWrite) => {
   
         // Send mouse event to GLFW.
         if (GLFW.active.mouseButtonFunc) {
-          getWasmTableEntry(GLFW.active.mouseButtonFunc)(GLFW.active.id, eventButton, status, GLFW.getModBits(GLFW.active));
+          ((a1, a2, a3, a4) => dynCall_viiii(GLFW.active.mouseButtonFunc, a1, a2, a3, a4))(GLFW.active.id, eventButton, status, GLFW.getModBits(GLFW.active));
         }
       },
   onMouseButtonDown:(event) => {
@@ -7836,7 +7857,7 @@ var stringToUTF8Array = (str, heap, outIdx, maxBytesToWrite) => {
           sx = event.deltaX;
         }
   
-        getWasmTableEntry(GLFW.active.scrollFunc)(GLFW.active.id, sx, sy);
+        ((a1, a2, a3) => dynCall_vidd(GLFW.active.scrollFunc, a1, a2, a3))(GLFW.active.id, sx, sy);
   
         event.preventDefault();
       },
@@ -7888,14 +7909,14 @@ var stringToUTF8Array = (str, heap, outIdx, maxBytesToWrite) => {
         if (!GLFW.active) return;
   
         if (GLFW.active.windowSizeFunc) {
-          getWasmTableEntry(GLFW.active.windowSizeFunc)(GLFW.active.id, GLFW.active.width, GLFW.active.height);
+          ((a1, a2, a3) => dynCall_viii(GLFW.active.windowSizeFunc, a1, a2, a3))(GLFW.active.id, GLFW.active.width, GLFW.active.height);
         }
       },
   onFramebufferSizeChanged:() => {
         if (!GLFW.active) return;
   
         if (GLFW.active.framebufferSizeFunc) {
-          getWasmTableEntry(GLFW.active.framebufferSizeFunc)(GLFW.active.id, GLFW.active.framebufferWidth, GLFW.active.framebufferHeight);
+          ((a1, a2, a3) => dynCall_viii(GLFW.active.framebufferSizeFunc, a1, a2, a3))(GLFW.active.id, GLFW.active.framebufferWidth, GLFW.active.framebufferHeight);
         }
       },
   onWindowContentScaleChanged:(scale) => {
@@ -7903,7 +7924,7 @@ var stringToUTF8Array = (str, heap, outIdx, maxBytesToWrite) => {
         if (!GLFW.active) return;
   
         if (GLFW.active.windowContentScaleFunc) {
-          getWasmTableEntry(GLFW.active.windowContentScaleFunc)(GLFW.active.id, GLFW.scale, GLFW.scale);
+          ((a1, a2, a3) => dynCall_viff(GLFW.active.windowContentScaleFunc, a1, a2, a3))(GLFW.active.id, GLFW.scale, GLFW.scale);
         }
       },
   getTime:() => _emscripten_get_now() / 1000,
@@ -7947,7 +7968,7 @@ var stringToUTF8Array = (str, heap, outIdx, maxBytesToWrite) => {
                 };
   
                 if (GLFW.joystickFunc) {
-                  getWasmTableEntry(GLFW.joystickFunc)(joy, 0x00040001); // GLFW_CONNECTED
+                  ((a1, a2) => dynCall_vii(GLFW.joystickFunc, a1, a2))(joy, 0x00040001); // GLFW_CONNECTED
                 }
               }
   
@@ -7965,7 +7986,7 @@ var stringToUTF8Array = (str, heap, outIdx, maxBytesToWrite) => {
                 out('glfw joystick disconnected',joy);
   
                 if (GLFW.joystickFunc) {
-                  getWasmTableEntry(GLFW.joystickFunc)(joy, 0x00040002); // GLFW_DISCONNECTED
+                  ((a1, a2) => dynCall_vii(GLFW.joystickFunc, a1, a2))(joy, 0x00040002); // GLFW_DISCONNECTED
                 }
   
                 _free(GLFW.joys[joy].id);
@@ -8053,7 +8074,7 @@ var stringToUTF8Array = (str, heap, outIdx, maxBytesToWrite) => {
             var data = e.target.result;
             FS.writeFile(path, new Uint8Array(data));
             if (++written === numfiles) {
-              getWasmTableEntry(GLFW.active.dropFunc)(GLFW.active.id, filenamesArray.length, filenames);
+              ((a1, a2, a3) => dynCall_viii(GLFW.active.dropFunc, a1, a2, a3))(GLFW.active.id, filenamesArray.length, filenames);
   
               for (var i = 0; i < filenamesArray.length; ++i) {
                 _free(filenamesArray[i]);
@@ -8345,7 +8366,7 @@ var stringToUTF8Array = (str, heap, outIdx, maxBytesToWrite) => {
         if (!win) return;
   
         if (win.windowCloseFunc) {
-          getWasmTableEntry(win.windowCloseFunc)(win.id);
+          ((a1) => dynCall_vi(win.windowCloseFunc, a1))(win.id);
         }
   
         GLFW.windows[win.id - 1] = null;
@@ -8733,6 +8754,279 @@ var stringToUTF8Array = (str, heap, outIdx, maxBytesToWrite) => {
   }
   _write.stub = true;
 
+  var runAndAbortIfError = (func) => {
+      try {
+        return func();
+      } catch (e) {
+        abort(e);
+      }
+    };
+  
+  
+  var createNamedFunction = (name, func) => Object.defineProperty(func, 'name', { value: name });
+  
+  var runtimeKeepalivePush = () => {
+      runtimeKeepaliveCounter += 1;
+    };
+  
+  var runtimeKeepalivePop = () => {
+      assert(runtimeKeepaliveCounter > 0);
+      runtimeKeepaliveCounter -= 1;
+    };
+  
+  
+  var Asyncify = {
+  instrumentWasmImports(imports) {
+        var importPattern = /^(invoke_.*|__asyncjs__.*)$/;
+  
+        for (let [x, original] of Object.entries(imports)) {
+          if (typeof original == 'function') {
+            let isAsyncifyImport = original.isAsync || importPattern.test(x);
+            imports[x] = (...args) => {
+              var originalAsyncifyState = Asyncify.state;
+              try {
+                return original(...args);
+              } finally {
+                // Only asyncify-declared imports are allowed to change the
+                // state.
+                // Changing the state from normal to disabled is allowed (in any
+                // function) as that is what shutdown does (and we don't have an
+                // explicit list of shutdown imports).
+                var changedToDisabled =
+                      originalAsyncifyState === Asyncify.State.Normal &&
+                      Asyncify.state        === Asyncify.State.Disabled;
+                // invoke_* functions are allowed to change the state if we do
+                // not ignore indirect calls.
+                var ignoredInvoke = x.startsWith('invoke_') &&
+                                    true;
+                if (Asyncify.state !== originalAsyncifyState &&
+                    !isAsyncifyImport &&
+                    !changedToDisabled &&
+                    !ignoredInvoke) {
+                  abort(`import ${x} was not in ASYNCIFY_IMPORTS, but changed the state`);
+                }
+              }
+            };
+          }
+        }
+      },
+  instrumentFunction(original) {
+        var wrapper = (...args) => {
+          Asyncify.exportCallStack.push(original);
+          try {
+            return original(...args);
+          } finally {
+            if (!ABORT) {
+              var top = Asyncify.exportCallStack.pop();
+              assert(top === original);
+              Asyncify.maybeStopUnwind();
+            }
+          }
+        };
+        Asyncify.funcWrappers.set(original, wrapper);
+        wrapper = createNamedFunction(`__asyncify_wrapper_${original.name}`, wrapper);
+        return wrapper;
+      },
+  instrumentWasmExports(exports) {
+        var ret = {};
+        for (let [x, original] of Object.entries(exports)) {
+          if (typeof original == 'function') {
+            var wrapper = Asyncify.instrumentFunction(original);
+            ret[x] = wrapper;
+          } else {
+            ret[x] = original;
+          }
+        }
+        return ret;
+      },
+  State:{
+  Normal:0,
+  Unwinding:1,
+  Rewinding:2,
+  Disabled:3,
+  },
+  state:0,
+  StackSize:4096,
+  currData:null,
+  handleSleepReturnValue:0,
+  exportCallStack:[],
+  callstackFuncToId:new Map,
+  callStackIdToFunc:new Map,
+  funcWrappers:new Map,
+  callStackId:0,
+  asyncPromiseHandlers:null,
+  sleepCallbacks:[],
+  getCallStackId(func) {
+        assert(func);
+        if (!Asyncify.callstackFuncToId.has(func)) {
+          var id = Asyncify.callStackId++;
+          Asyncify.callstackFuncToId.set(func, id);
+          Asyncify.callStackIdToFunc.set(id, func);
+        }
+        return Asyncify.callstackFuncToId.get(func);
+      },
+  maybeStopUnwind() {
+        if (Asyncify.currData &&
+            Asyncify.state === Asyncify.State.Unwinding &&
+            Asyncify.exportCallStack.length === 0) {
+          // We just finished unwinding.
+          // Be sure to set the state before calling any other functions to avoid
+          // possible infinite recursion here (For example in debug pthread builds
+          // the dbg() function itself can call back into WebAssembly to get the
+          // current pthread_self() pointer).
+          Asyncify.state = Asyncify.State.Normal;
+          
+          // Keep the runtime alive so that a re-wind can be done later.
+          runAndAbortIfError(_asyncify_stop_unwind);
+          if (typeof Fibers != 'undefined') {
+            Fibers.trampoline();
+          }
+        }
+      },
+  whenDone() {
+        assert(Asyncify.currData, 'Tried to wait for an async operation when none is in progress.');
+        assert(!Asyncify.asyncPromiseHandlers, 'Cannot have multiple async operations in flight at once');
+        return new Promise((resolve, reject) => {
+          Asyncify.asyncPromiseHandlers = { resolve, reject };
+        });
+      },
+  allocateData() {
+        // An asyncify data structure has three fields:
+        //  0  current stack pos
+        //  4  max stack pos
+        //  8  id of function at bottom of the call stack (callStackIdToFunc[id] == wasm func)
+        //
+        // The Asyncify ABI only interprets the first two fields, the rest is for the runtime.
+        // We also embed a stack in the same memory region here, right next to the structure.
+        // This struct is also defined as asyncify_data_t in emscripten/fiber.h
+        var ptr = _malloc(12 + Asyncify.StackSize);
+        Asyncify.setDataHeader(ptr, ptr + 12, Asyncify.StackSize);
+        Asyncify.setDataRewindFunc(ptr);
+        return ptr;
+      },
+  setDataHeader(ptr, stack, stackSize) {
+        HEAPU32[((ptr)>>2)] = stack;
+        HEAPU32[(((ptr)+(4))>>2)] = stack + stackSize;
+      },
+  setDataRewindFunc(ptr) {
+        var bottomOfCallStack = Asyncify.exportCallStack[0];
+        assert(bottomOfCallStack, 'exportCallStack is empty');
+        var rewindId = Asyncify.getCallStackId(bottomOfCallStack);
+        HEAP32[(((ptr)+(8))>>2)] = rewindId;
+      },
+  getDataRewindFunc(ptr) {
+        var id = HEAP32[(((ptr)+(8))>>2)];
+        var func = Asyncify.callStackIdToFunc.get(id);
+        assert(func, `id ${id} not found in callStackIdToFunc`);
+        return func;
+      },
+  doRewind(ptr) {
+        var original = Asyncify.getDataRewindFunc(ptr);
+        var func = Asyncify.funcWrappers.get(original);
+        assert(original);
+        assert(func);
+        // Once we have rewound and the stack we no longer need to artificially
+        // keep the runtime alive.
+        
+        return callUserCallback(func);
+      },
+  handleSleep(startAsync) {
+        assert(Asyncify.state !== Asyncify.State.Disabled, 'Asyncify cannot be done during or after the runtime exits');
+        if (ABORT) return;
+        if (Asyncify.state === Asyncify.State.Normal) {
+          // Prepare to sleep. Call startAsync, and see what happens:
+          // if the code decided to call our callback synchronously,
+          // then no async operation was in fact begun, and we don't
+          // need to do anything.
+          var reachedCallback = false;
+          var reachedAfterCallback = false;
+          startAsync((handleSleepReturnValue = 0) => {
+            // old emterpretify API supported other stuff
+            assert(['undefined', 'number', 'boolean', 'bigint'].includes(typeof handleSleepReturnValue), `invalid type for handleSleepReturnValue: '${typeof handleSleepReturnValue}'`);
+            if (ABORT) return;
+            Asyncify.handleSleepReturnValue = handleSleepReturnValue;
+            reachedCallback = true;
+            if (!reachedAfterCallback) {
+              // We are happening synchronously, so no need for async.
+              return;
+            }
+            // This async operation did not happen synchronously, so we did
+            // unwind. In that case there can be no compiled code on the stack,
+            // as it might break later operations (we can rewind ok now, but if
+            // we unwind again, we would unwind through the extra compiled code
+            // too).
+            assert(!Asyncify.exportCallStack.length, 'Waking up (starting to rewind) must be done from JS, without compiled code on the stack.');
+            Asyncify.state = Asyncify.State.Rewinding;
+            runAndAbortIfError(() => _asyncify_start_rewind(Asyncify.currData));
+            if (typeof MainLoop != 'undefined' && MainLoop.func) {
+              MainLoop.resume();
+            }
+            var asyncWasmReturnValue, isError = false;
+            try {
+              asyncWasmReturnValue = Asyncify.doRewind(Asyncify.currData);
+            } catch (err) {
+              asyncWasmReturnValue = err;
+              isError = true;
+            }
+            // Track whether the return value was handled by any promise handlers.
+            var handled = false;
+            if (!Asyncify.currData) {
+              // All asynchronous execution has finished.
+              // `asyncWasmReturnValue` now contains the final
+              // return value of the exported async WASM function.
+              //
+              // Note: `asyncWasmReturnValue` is distinct from
+              // `Asyncify.handleSleepReturnValue`.
+              // `Asyncify.handleSleepReturnValue` contains the return
+              // value of the last C function to have executed
+              // `Asyncify.handleSleep()`, whereas `asyncWasmReturnValue`
+              // contains the return value of the exported WASM function
+              // that may have called C functions that
+              // call `Asyncify.handleSleep()`.
+              var asyncPromiseHandlers = Asyncify.asyncPromiseHandlers;
+              if (asyncPromiseHandlers) {
+                Asyncify.asyncPromiseHandlers = null;
+                (isError ? asyncPromiseHandlers.reject : asyncPromiseHandlers.resolve)(asyncWasmReturnValue);
+                handled = true;
+              }
+            }
+            if (isError && !handled) {
+              // If there was an error and it was not handled by now, we have no choice but to
+              // rethrow that error into the global scope where it can be caught only by
+              // `onerror` or `onunhandledpromiserejection`.
+              throw asyncWasmReturnValue;
+            }
+          });
+          reachedAfterCallback = true;
+          if (!reachedCallback) {
+            // A true async operation was begun; start a sleep.
+            Asyncify.state = Asyncify.State.Unwinding;
+            // TODO: reuse, don't alloc/free every sleep
+            Asyncify.currData = Asyncify.allocateData();
+            if (typeof MainLoop != 'undefined' && MainLoop.func) {
+              MainLoop.pause();
+            }
+            runAndAbortIfError(() => _asyncify_start_unwind(Asyncify.currData));
+          }
+        } else if (Asyncify.state === Asyncify.State.Rewinding) {
+          // Stop a resume.
+          Asyncify.state = Asyncify.State.Normal;
+          runAndAbortIfError(_asyncify_stop_rewind);
+          _free(Asyncify.currData);
+          Asyncify.currData = null;
+          // Call all sleep callbacks now that the sleep-resume is all done.
+          Asyncify.sleepCallbacks.forEach(callUserCallback);
+        } else {
+          abort(`invalid state: ${Asyncify.state}`);
+        }
+        return Asyncify.handleSleepReturnValue;
+      },
+  handleAsync:(startAsync) => Asyncify.handleSleep(async (wakeUp) => {
+        // TODO: add error handling as a second param when handleSleep implements it.
+        wakeUp(await startAsync());
+      }),
+  };
+
   FS.createPreloadedFile = FS_createPreloadedFile;
   FS.preloadFile = FS_preloadFile;
   FS.staticInit();;
@@ -8810,7 +9104,6 @@ if (Module['wasmBinary']) wasmBinary = Module['wasmBinary'];
   'stackAlloc',
   'getTempRet0',
   'setTempRet0',
-  'createNamedFunction',
   'zeroMemory',
   'getHeapMax',
   'growMemory',
@@ -8825,9 +9118,6 @@ if (Module['wasmBinary']) wasmBinary = Module['wasmBinary'];
   'getExecutableName',
   'autoResumeAudioContext',
   'getDynCaller',
-  'dynCall',
-  'runtimeKeepalivePush',
-  'runtimeKeepalivePop',
   'asmjsMangle',
   'alignMemory',
   'HandleAllocator',
@@ -8912,7 +9202,6 @@ if (Module['wasmBinary']) wasmBinary = Module['wasmBinary'];
   '_setNetworkCallback',
   'writeGLArray',
   'registerWebGlEventCallback',
-  'runAndAbortIfError',
   'ALLOC_NORMAL',
   'ALLOC_STACK',
   'allocate',
@@ -8953,6 +9242,7 @@ missingLibrarySymbols.forEach(missingLibrarySymbol)
   'bigintToI53Checked',
   'stackSave',
   'stackRestore',
+  'createNamedFunction',
   'ptrToString',
   'exitJS',
   'abortOnCannotGrowMemory',
@@ -8968,8 +9258,12 @@ missingLibrarySymbols.forEach(missingLibrarySymbol)
   'readEmAsmArgs',
   'runEmAsmFunction',
   'jstoi_q',
+  'dynCallLegacy',
+  'dynCall',
   'handleException',
   'keepRuntimeAlive',
+  'runtimeKeepalivePush',
+  'runtimeKeepalivePop',
   'callUserCallback',
   'maybeExit',
   'asyncLoad',
@@ -9199,6 +9493,9 @@ missingLibrarySymbols.forEach(missingLibrarySymbol)
   'EGL',
   'GLEW',
   'IDBStore',
+  'runAndAbortIfError',
+  'Asyncify',
+  'Fibers',
   'SDL',
   'SDL_gfx',
   'GLFW_Window',
@@ -9221,48 +9518,48 @@ function checkIncomingModuleAPI() {
   ignoredModuleProp('loadSplitModule');
 }
 var ASM_CONSTS = {
-  134208: () => { if (document.fullscreenElement) return 1; },  
- 134254: () => { return document.getElementById('canvas').width; },  
- 134306: () => { return parseInt(document.getElementById('canvas').style.width); },  
- 134374: () => { document.exitFullscreen(); },  
- 134401: () => { setTimeout(function() { Module.requestFullscreen(false, false); }, 100); },  
- 134474: () => { if (document.fullscreenElement) return 1; },  
- 134520: () => { return document.getElementById('canvas').width; },  
- 134572: () => { return screen.width; },  
- 134597: () => { document.exitFullscreen(); },  
- 134624: () => { setTimeout(function() { Module.requestFullscreen(false, true); setTimeout(function() { canvas.style.width="unset"; }, 100); }, 100); },  
- 134757: () => { return window.innerWidth; },  
- 134783: () => { return window.innerHeight; },  
- 134810: () => { if (document.fullscreenElement) return 1; },  
- 134856: () => { return document.getElementById('canvas').width; },  
- 134908: () => { return parseInt(document.getElementById('canvas').style.width); },  
- 134976: () => { if (document.fullscreenElement) return 1; },  
- 135022: () => { return document.getElementById('canvas').width; },  
- 135074: () => { return screen.width; },  
- 135099: () => { return window.innerWidth; },  
- 135125: () => { return window.innerHeight; },  
- 135152: () => { if (document.fullscreenElement) return 1; },  
- 135198: () => { return document.getElementById('canvas').width; },  
- 135250: () => { return screen.width; },  
- 135275: () => { document.exitFullscreen(); },  
- 135302: () => { if (document.fullscreenElement) return 1; },  
- 135348: () => { return document.getElementById('canvas').width; },  
- 135400: () => { return parseInt(document.getElementById('canvas').style.width); },  
- 135468: () => { document.exitFullscreen(); },  
- 135495: ($0) => { document.getElementById('canvas').style.opacity = $0; },  
- 135553: () => { return screen.width; },  
- 135578: () => { return screen.height; },  
- 135604: () => { return window.screenX; },  
- 135631: () => { return window.screenY; },  
- 135658: ($0) => { navigator.clipboard.writeText(UTF8ToString($0)); },  
- 135711: ($0) => { document.getElementById("canvas").style.cursor = UTF8ToString($0); },  
- 135782: () => { document.getElementById('canvas').style.cursor = 'none'; },  
- 135839: ($0, $1, $2, $3) => { try { navigator.getGamepads()[$0].vibrationActuator.playEffect('dual-rumble', { startDelay: 0, duration: $3, weakMagnitude: $1, strongMagnitude: $2 }); } catch (e) { try { navigator.getGamepads()[$0].hapticActuators[0].pulse($2, $3); } catch (e) { } } },  
- 136095: ($0) => { document.getElementById('canvas').style.cursor = UTF8ToString($0); },  
- 136166: () => { if (document.fullscreenElement) return 1; },  
- 136212: () => { return window.innerWidth; },  
- 136238: () => { return window.innerHeight; },  
- 136265: () => { if (document.pointerLockElement) return 1; }
+  134096: () => { if (document.fullscreenElement) return 1; },  
+ 134142: () => { return document.getElementById('canvas').width; },  
+ 134194: () => { return parseInt(document.getElementById('canvas').style.width); },  
+ 134262: () => { document.exitFullscreen(); },  
+ 134289: () => { setTimeout(function() { Module.requestFullscreen(false, false); }, 100); },  
+ 134362: () => { if (document.fullscreenElement) return 1; },  
+ 134408: () => { return document.getElementById('canvas').width; },  
+ 134460: () => { return screen.width; },  
+ 134485: () => { document.exitFullscreen(); },  
+ 134512: () => { setTimeout(function() { Module.requestFullscreen(false, true); setTimeout(function() { canvas.style.width="unset"; }, 100); }, 100); },  
+ 134645: () => { return window.innerWidth; },  
+ 134671: () => { return window.innerHeight; },  
+ 134698: () => { if (document.fullscreenElement) return 1; },  
+ 134744: () => { return document.getElementById('canvas').width; },  
+ 134796: () => { return parseInt(document.getElementById('canvas').style.width); },  
+ 134864: () => { if (document.fullscreenElement) return 1; },  
+ 134910: () => { return document.getElementById('canvas').width; },  
+ 134962: () => { return screen.width; },  
+ 134987: () => { return window.innerWidth; },  
+ 135013: () => { return window.innerHeight; },  
+ 135040: () => { if (document.fullscreenElement) return 1; },  
+ 135086: () => { return document.getElementById('canvas').width; },  
+ 135138: () => { return screen.width; },  
+ 135163: () => { document.exitFullscreen(); },  
+ 135190: () => { if (document.fullscreenElement) return 1; },  
+ 135236: () => { return document.getElementById('canvas').width; },  
+ 135288: () => { return parseInt(document.getElementById('canvas').style.width); },  
+ 135356: () => { document.exitFullscreen(); },  
+ 135383: ($0) => { document.getElementById('canvas').style.opacity = $0; },  
+ 135441: () => { return screen.width; },  
+ 135466: () => { return screen.height; },  
+ 135492: () => { return window.screenX; },  
+ 135519: () => { return window.screenY; },  
+ 135546: ($0) => { navigator.clipboard.writeText(UTF8ToString($0)); },  
+ 135599: ($0) => { document.getElementById("canvas").style.cursor = UTF8ToString($0); },  
+ 135670: () => { document.getElementById('canvas').style.cursor = 'none'; },  
+ 135727: ($0, $1, $2, $3) => { try { navigator.getGamepads()[$0].vibrationActuator.playEffect('dual-rumble', { startDelay: 0, duration: $3, weakMagnitude: $1, strongMagnitude: $2 }); } catch (e) { try { navigator.getGamepads()[$0].hapticActuators[0].pulse($2, $3); } catch (e) { } } },  
+ 135983: ($0) => { document.getElementById('canvas').style.cursor = UTF8ToString($0); },  
+ 136054: () => { if (document.fullscreenElement) return 1; },  
+ 136100: () => { return window.innerWidth; },  
+ 136126: () => { return window.innerHeight; },  
+ 136153: () => { if (document.pointerLockElement) return 1; }
 };
 
 // Imports from the Wasm binary.
@@ -9280,10 +9577,42 @@ var _emscripten_stack_get_free = makeInvalidEarlyAccess('_emscripten_stack_get_f
 var __emscripten_stack_restore = makeInvalidEarlyAccess('__emscripten_stack_restore');
 var __emscripten_stack_alloc = makeInvalidEarlyAccess('__emscripten_stack_alloc');
 var _emscripten_stack_get_current = makeInvalidEarlyAccess('_emscripten_stack_get_current');
+var dynCall_iiiiiiiiii = makeInvalidEarlyAccess('dynCall_iiiiiiiiii');
+var dynCall_viiiiii = makeInvalidEarlyAccess('dynCall_viiiiii');
+var dynCall_viiiiiii = makeInvalidEarlyAccess('dynCall_viiiiiii');
+var dynCall_viiiii = makeInvalidEarlyAccess('dynCall_viiiii');
+var dynCall_viiiiijii = makeInvalidEarlyAccess('dynCall_viiiiijii');
+var dynCall_iii = makeInvalidEarlyAccess('dynCall_iii');
+var dynCall_vii = makeInvalidEarlyAccess('dynCall_vii');
+var dynCall_viii = makeInvalidEarlyAccess('dynCall_viii');
+var dynCall_viff = makeInvalidEarlyAccess('dynCall_viff');
+var dynCall_viiii = makeInvalidEarlyAccess('dynCall_viiii');
+var dynCall_vidd = makeInvalidEarlyAccess('dynCall_vidd');
+var dynCall_ii = makeInvalidEarlyAccess('dynCall_ii');
+var dynCall_iiii = makeInvalidEarlyAccess('dynCall_iiii');
+var dynCall_vi = makeInvalidEarlyAccess('dynCall_vi');
+var dynCall_vffff = makeInvalidEarlyAccess('dynCall_vffff');
+var dynCall_vf = makeInvalidEarlyAccess('dynCall_vf');
+var dynCall_viiiiiiii = makeInvalidEarlyAccess('dynCall_viiiiiiii');
+var dynCall_viiiiiiiii = makeInvalidEarlyAccess('dynCall_viiiiiiiii');
+var dynCall_i = makeInvalidEarlyAccess('dynCall_i');
+var dynCall_vff = makeInvalidEarlyAccess('dynCall_vff');
+var dynCall_v = makeInvalidEarlyAccess('dynCall_v');
+var dynCall_vfi = makeInvalidEarlyAccess('dynCall_vfi');
+var dynCall_viif = makeInvalidEarlyAccess('dynCall_viif');
+var dynCall_vif = makeInvalidEarlyAccess('dynCall_vif');
+var dynCall_vifff = makeInvalidEarlyAccess('dynCall_vifff');
+var dynCall_viffff = makeInvalidEarlyAccess('dynCall_viffff');
+var dynCall_vfff = makeInvalidEarlyAccess('dynCall_vfff');
+var dynCall_jiji = makeInvalidEarlyAccess('dynCall_jiji');
+var dynCall_iidiiii = makeInvalidEarlyAccess('dynCall_iidiiii');
+var _asyncify_start_unwind = makeInvalidEarlyAccess('_asyncify_start_unwind');
+var _asyncify_stop_unwind = makeInvalidEarlyAccess('_asyncify_stop_unwind');
+var _asyncify_start_rewind = makeInvalidEarlyAccess('_asyncify_start_rewind');
+var _asyncify_stop_rewind = makeInvalidEarlyAccess('_asyncify_stop_rewind');
 var memory = makeInvalidEarlyAccess('memory');
 var __indirect_function_table = makeInvalidEarlyAccess('__indirect_function_table');
 var wasmMemory = makeInvalidEarlyAccess('wasmMemory');
-var wasmTable = makeInvalidEarlyAccess('wasmTable');
 
 function assignWasmExports(wasmExports) {
   assert(typeof wasmExports['default_context_ptr'] != 'undefined', 'missing Wasm export: default_context_ptr');
@@ -9300,6 +9629,39 @@ function assignWasmExports(wasmExports) {
   assert(typeof wasmExports['_emscripten_stack_restore'] != 'undefined', 'missing Wasm export: _emscripten_stack_restore');
   assert(typeof wasmExports['_emscripten_stack_alloc'] != 'undefined', 'missing Wasm export: _emscripten_stack_alloc');
   assert(typeof wasmExports['emscripten_stack_get_current'] != 'undefined', 'missing Wasm export: emscripten_stack_get_current');
+  assert(typeof wasmExports['dynCall_iiiiiiiiii'] != 'undefined', 'missing Wasm export: dynCall_iiiiiiiiii');
+  assert(typeof wasmExports['dynCall_viiiiii'] != 'undefined', 'missing Wasm export: dynCall_viiiiii');
+  assert(typeof wasmExports['dynCall_viiiiiii'] != 'undefined', 'missing Wasm export: dynCall_viiiiiii');
+  assert(typeof wasmExports['dynCall_viiiii'] != 'undefined', 'missing Wasm export: dynCall_viiiii');
+  assert(typeof wasmExports['dynCall_viiiiijii'] != 'undefined', 'missing Wasm export: dynCall_viiiiijii');
+  assert(typeof wasmExports['dynCall_iii'] != 'undefined', 'missing Wasm export: dynCall_iii');
+  assert(typeof wasmExports['dynCall_vii'] != 'undefined', 'missing Wasm export: dynCall_vii');
+  assert(typeof wasmExports['dynCall_viii'] != 'undefined', 'missing Wasm export: dynCall_viii');
+  assert(typeof wasmExports['dynCall_viff'] != 'undefined', 'missing Wasm export: dynCall_viff');
+  assert(typeof wasmExports['dynCall_viiii'] != 'undefined', 'missing Wasm export: dynCall_viiii');
+  assert(typeof wasmExports['dynCall_vidd'] != 'undefined', 'missing Wasm export: dynCall_vidd');
+  assert(typeof wasmExports['dynCall_ii'] != 'undefined', 'missing Wasm export: dynCall_ii');
+  assert(typeof wasmExports['dynCall_iiii'] != 'undefined', 'missing Wasm export: dynCall_iiii');
+  assert(typeof wasmExports['dynCall_vi'] != 'undefined', 'missing Wasm export: dynCall_vi');
+  assert(typeof wasmExports['dynCall_vffff'] != 'undefined', 'missing Wasm export: dynCall_vffff');
+  assert(typeof wasmExports['dynCall_vf'] != 'undefined', 'missing Wasm export: dynCall_vf');
+  assert(typeof wasmExports['dynCall_viiiiiiii'] != 'undefined', 'missing Wasm export: dynCall_viiiiiiii');
+  assert(typeof wasmExports['dynCall_viiiiiiiii'] != 'undefined', 'missing Wasm export: dynCall_viiiiiiiii');
+  assert(typeof wasmExports['dynCall_i'] != 'undefined', 'missing Wasm export: dynCall_i');
+  assert(typeof wasmExports['dynCall_vff'] != 'undefined', 'missing Wasm export: dynCall_vff');
+  assert(typeof wasmExports['dynCall_v'] != 'undefined', 'missing Wasm export: dynCall_v');
+  assert(typeof wasmExports['dynCall_vfi'] != 'undefined', 'missing Wasm export: dynCall_vfi');
+  assert(typeof wasmExports['dynCall_viif'] != 'undefined', 'missing Wasm export: dynCall_viif');
+  assert(typeof wasmExports['dynCall_vif'] != 'undefined', 'missing Wasm export: dynCall_vif');
+  assert(typeof wasmExports['dynCall_vifff'] != 'undefined', 'missing Wasm export: dynCall_vifff');
+  assert(typeof wasmExports['dynCall_viffff'] != 'undefined', 'missing Wasm export: dynCall_viffff');
+  assert(typeof wasmExports['dynCall_vfff'] != 'undefined', 'missing Wasm export: dynCall_vfff');
+  assert(typeof wasmExports['dynCall_jiji'] != 'undefined', 'missing Wasm export: dynCall_jiji');
+  assert(typeof wasmExports['dynCall_iidiiii'] != 'undefined', 'missing Wasm export: dynCall_iidiiii');
+  assert(typeof wasmExports['asyncify_start_unwind'] != 'undefined', 'missing Wasm export: asyncify_start_unwind');
+  assert(typeof wasmExports['asyncify_stop_unwind'] != 'undefined', 'missing Wasm export: asyncify_stop_unwind');
+  assert(typeof wasmExports['asyncify_start_rewind'] != 'undefined', 'missing Wasm export: asyncify_start_rewind');
+  assert(typeof wasmExports['asyncify_stop_rewind'] != 'undefined', 'missing Wasm export: asyncify_stop_rewind');
   assert(typeof wasmExports['memory'] != 'undefined', 'missing Wasm export: memory');
   assert(typeof wasmExports['__indirect_function_table'] != 'undefined', 'missing Wasm export: __indirect_function_table');
   _default_context_ptr = Module['_default_context_ptr'] = createExportWrapper('default_context_ptr', 0);
@@ -9316,8 +9678,41 @@ function assignWasmExports(wasmExports) {
   __emscripten_stack_restore = wasmExports['_emscripten_stack_restore'];
   __emscripten_stack_alloc = wasmExports['_emscripten_stack_alloc'];
   _emscripten_stack_get_current = wasmExports['emscripten_stack_get_current'];
+  dynCall_iiiiiiiiii = dynCalls['iiiiiiiiii'] = createExportWrapper('dynCall_iiiiiiiiii', 10);
+  dynCall_viiiiii = dynCalls['viiiiii'] = createExportWrapper('dynCall_viiiiii', 7);
+  dynCall_viiiiiii = dynCalls['viiiiiii'] = createExportWrapper('dynCall_viiiiiii', 8);
+  dynCall_viiiii = dynCalls['viiiii'] = createExportWrapper('dynCall_viiiii', 6);
+  dynCall_viiiiijii = dynCalls['viiiiijii'] = createExportWrapper('dynCall_viiiiijii', 9);
+  dynCall_iii = dynCalls['iii'] = createExportWrapper('dynCall_iii', 3);
+  dynCall_vii = dynCalls['vii'] = createExportWrapper('dynCall_vii', 3);
+  dynCall_viii = dynCalls['viii'] = createExportWrapper('dynCall_viii', 4);
+  dynCall_viff = dynCalls['viff'] = createExportWrapper('dynCall_viff', 4);
+  dynCall_viiii = dynCalls['viiii'] = createExportWrapper('dynCall_viiii', 5);
+  dynCall_vidd = dynCalls['vidd'] = createExportWrapper('dynCall_vidd', 4);
+  dynCall_ii = dynCalls['ii'] = createExportWrapper('dynCall_ii', 2);
+  dynCall_iiii = dynCalls['iiii'] = createExportWrapper('dynCall_iiii', 4);
+  dynCall_vi = dynCalls['vi'] = createExportWrapper('dynCall_vi', 2);
+  dynCall_vffff = dynCalls['vffff'] = createExportWrapper('dynCall_vffff', 5);
+  dynCall_vf = dynCalls['vf'] = createExportWrapper('dynCall_vf', 2);
+  dynCall_viiiiiiii = dynCalls['viiiiiiii'] = createExportWrapper('dynCall_viiiiiiii', 9);
+  dynCall_viiiiiiiii = dynCalls['viiiiiiiii'] = createExportWrapper('dynCall_viiiiiiiii', 10);
+  dynCall_i = dynCalls['i'] = createExportWrapper('dynCall_i', 1);
+  dynCall_vff = dynCalls['vff'] = createExportWrapper('dynCall_vff', 3);
+  dynCall_v = dynCalls['v'] = createExportWrapper('dynCall_v', 1);
+  dynCall_vfi = dynCalls['vfi'] = createExportWrapper('dynCall_vfi', 3);
+  dynCall_viif = dynCalls['viif'] = createExportWrapper('dynCall_viif', 4);
+  dynCall_vif = dynCalls['vif'] = createExportWrapper('dynCall_vif', 3);
+  dynCall_vifff = dynCalls['vifff'] = createExportWrapper('dynCall_vifff', 5);
+  dynCall_viffff = dynCalls['viffff'] = createExportWrapper('dynCall_viffff', 6);
+  dynCall_vfff = dynCalls['vfff'] = createExportWrapper('dynCall_vfff', 4);
+  dynCall_jiji = dynCalls['jiji'] = createExportWrapper('dynCall_jiji', 4);
+  dynCall_iidiiii = dynCalls['iidiiii'] = createExportWrapper('dynCall_iidiiii', 7);
+  _asyncify_start_unwind = createExportWrapper('asyncify_start_unwind', 1);
+  _asyncify_stop_unwind = createExportWrapper('asyncify_stop_unwind', 0);
+  _asyncify_start_rewind = createExportWrapper('asyncify_start_rewind', 1);
+  _asyncify_stop_rewind = createExportWrapper('asyncify_stop_rewind', 0);
   memory = wasmMemory = wasmExports['memory'];
-  __indirect_function_table = wasmTable = wasmExports['__indirect_function_table'];
+  __indirect_function_table = wasmExports['__indirect_function_table'];
 }
 
 var wasmImports = {

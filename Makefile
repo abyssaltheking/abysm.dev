@@ -11,3 +11,5 @@ engine:
 server:
 	cd $(SERVER_DIR) && go run .
 
+engine-clean:
+	sudo rm -rf /src/engine/build

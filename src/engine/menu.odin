@@ -30,7 +30,6 @@ create_menu :: proc() -> Menu {
 draw_menu :: proc(menu: ^Menu) {
     menu.play_button = raylib.GuiButton(centered_rectangle(menu.center_of_screen.x, menu.center_of_screen.y, 100, 50), "Play!")
     play_button_pressed = menu.play_button
-    fmt.println(play_button_pressed)
 }
 
 centered_rectangle :: proc(x, y, width, height : f32) -> raylib.Rectangle {
